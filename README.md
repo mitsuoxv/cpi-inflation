@@ -7,7 +7,7 @@ Mitsuo Shiota
 -   [Get Euro data](#get-euro-data)
 -   [Compare US CPI and Euro HICP](#compare-us-cpi-and-euro-hicp)
 
-Updated: 2021-11-11
+Updated: 2021-11-12
 
 ## Get US data
 
@@ -38,6 +38,18 @@ component share of 2.811 percent.
 <https://www.bls.gov/cpi/factsheets/motor-fuel.htm>
 
 ``` r
+draw_lines <- function(df) {
+  df %>% 
+    mutate(date = as.Date(date)) %>% 
+    ggplot(aes(date, value, color = name)) +
+    geom_line() +
+    geom_hline(yintercept = 0, color = "gray50") +
+    scale_x_date(date_labels = "%Y") +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    labs(x = NULL, y = NULL, color = NULL,
+         subtitle = "24-month change, annual rate")
+}
+  
 us_cpi_wide <- us_cpi_data %>% 
   as_tsibble(key = symbol, index = date) %>% 
   mutate(date = yearmonth(date)) %>% 
@@ -48,19 +60,14 @@ us_cpi_wide <- us_cpi_data %>%
   mutate(
     gas_contr = gas * 0.02811, # component share as of December 2020
     cpi_excl_gas = cpi - gas_contr
-  ) %>% 
-  select(-starts_with("gas"))
+  )
 
 us_cpi_wide %>% 
+  select(-starts_with("gas")) %>% 
   pivot_longer(starts_with("cpi")) %>% 
-  ggplot(aes(date, value, color = name)) +
-  geom_line() +
-  geom_hline(yintercept = 0, color = "gray50") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  draw_lines() +
   scale_color_discrete(labels = c("CPI", "CPI excluding\ngasoline")) +
-  labs(x = NULL, y = NULL, color = NULL,
-       title = "US CPI inflation",
-       subtitle = "24-month change, annual rate")
+  labs(title = "US CPI inflation")
 ```
 
 ![](README_files/figure-gfm/us_cpi-1.png)<!-- -->
@@ -96,19 +103,14 @@ ea19_hicp_wide <- ea19_hicp %>%
   mutate(
     gas_contr = gas * 0.03667, # 
     cpi_excl_gas = cpi - gas_contr
-  ) %>% 
-  select(-starts_with("gas"))
+  )
 
 ea19_hicp_wide %>% 
+  select(-starts_with("gas")) %>% 
   pivot_longer(starts_with("cpi")) %>% 
-  ggplot(aes(date, value, color = name)) +
-  geom_line() +
-  geom_hline(yintercept = 0, color = "gray50") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  draw_lines() +
   scale_color_discrete(labels = c("CPI", "CPI excluding\ngasoline")) +
-  labs(x = NULL, y = NULL, color = NULL,
-       title = "Euro HICP inflation",
-       subtitle = "24-month change, annual rate")
+  labs(title = "Euro HICP inflation")
 ```
 
     ## Warning: Removed 25 row(s) containing missing values (geom_path).
@@ -123,25 +125,22 @@ I replicate the chart by Jason Furman.
 ``` r
 combo <- bind_cols(
   us_cpi_wide %>% 
-    rename(us_cpi = cpi, us_cpi_excl_gas = cpi_excl_gas),
+    rename(us_cpi = cpi, us_cpi_excl_gas = cpi_excl_gas,
+           us_gas = gas, us_gas_contr = gas_contr),
   ea19_hicp_wide %>% 
     as_tibble() %>% 
     select(-date) %>% 
-    rename(hicp = cpi, hicp_excl_gas = cpi_excl_gas)
+    rename(ea_cpi = cpi, ea_cpi_excl_gas = cpi_excl_gas,
+           ea_gas = gas, ea_gas_contr = gas_contr)
   )
 
 combo %>% 
-  select(us_cpi, hicp) %>% 
-  pivot_longer(us_cpi:hicp) %>% 
+  select(us_cpi, ea_cpi) %>% 
+  pivot_longer(us_cpi:ea_cpi) %>% 
   mutate(name = fct_reorder2(name, date, value)) %>% 
-  ggplot(aes(date, value, color = name)) +
-  geom_line() +
-  geom_hline(yintercept = 0, color = "gray50") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_color_discrete(labels = c("US CPI", "Euro HICP")) +
-  labs(x = NULL, y = NULL, color = NULL,
-       title = "Euro HICP vs US CPI",
-       subtitle = "24-month change, annual rate")
+  draw_lines() +
+  scale_color_discrete(labels = c("US", "Euro")) +
+  labs(title = "Euro vs US: CPI")
 ```
 
     ## Warning: Removed 1 row(s) containing missing values (geom_path).
@@ -152,17 +151,12 @@ I exclude gasoline. However, the current difference does not shrink.
 
 ``` r
 p <- combo %>% 
-  select(us_cpi_excl_gas, hicp_excl_gas) %>% 
-  pivot_longer(us_cpi_excl_gas:hicp_excl_gas) %>% 
+  select(us_cpi_excl_gas, ea_cpi_excl_gas) %>% 
+  pivot_longer(us_cpi_excl_gas:ea_cpi_excl_gas) %>% 
   mutate(name = fct_reorder2(name, date, value)) %>% 
-  ggplot(aes(date, value, color = name)) +
-  geom_line() +
-  geom_hline(yintercept = 0, color = "gray50") +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
-  scale_color_discrete(labels = c("US CPI", "Euro HICP")) +
-  labs(x = NULL, y = NULL, color = NULL,
-       title = "Euro HICP vs US CPI by excluding gasoline",
-       subtitle = "24-month change, annual rate")
+  draw_lines() +
+  scale_color_discrete(labels = c("US", "Euro")) +
+  labs(title = "Euro vs US: CPI by excluding gasoline")
 
 p
 ```
@@ -176,3 +170,17 @@ ggsave("image/inflation_excl_gas.png", p, width = 6, height = 4)
 ```
 
     ## Warning: Removed 24 row(s) containing missing values (geom_path).
+
+``` r
+combo %>% 
+  select(us_gas, ea_gas) %>% 
+  pivot_longer(us_gas:ea_gas) %>% 
+  mutate(name = fct_reorder2(name, date, value)) %>% 
+  draw_lines() +
+  scale_color_discrete(labels = c("US", "Euro")) +
+  labs(title = "Euro vs US: gasoline price")
+```
+
+    ## Warning: Removed 24 row(s) containing missing values (geom_path).
+
+![](README_files/figure-gfm/gasoline-1.png)<!-- -->
